@@ -1,0 +1,111 @@
+---
+title: "Family Retail Sales Time Series Analysis"
+author: "Will Barredo"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Load Libraries
+
+```{r setup, include=TRUE}
+library(readr)
+library(forecast)
+library(ggplot2)
+
+#loading data
+retail_data <- read_csv("/Users/willbarredo/Documents/School/Courses/Junior/Sem\ 2/time\ series/Week\ 3/family_clothing_retail_sales.csv")
+
+#convert to time series object
+retail_data$observation_date <- as.Date(retail_data$observation_date, format="%m/%d/%y")
+retail_ts <- ts(retail_data$retailSales, start=c(1992,1), frequency = 12)
+
+##exploratory analysis
+
+#plot time series
+plot(retail_ts, main="Family Retail Sales Time Series", ylab="Sales", xlab="Year")
+#plotting the time series shows an upward trend due to sales increasing with time, and the repeating cycles indicates the presence of seasonality. There is an anomaly present during the year 2020, which suggests an impact from COVID. Care must be taken when forecasting this time series. 
+
+acf(retail_ts, main="ACF of Retail Sales")
+#strong autocorrelation at regular intervals indicates seasonality, and the strong correlations with low lag indicating strong trend 
+
+decomp <- decompose(retail_ts)
+plot(decomp)
+#trend is shown by upward increase overtime. There is evidence of seasonality with repeating patterns, and there is noise, but notable spike in 2020.
+
+##trying models
+
+#mean model
+mean_model <- meanf(retail_ts,12)
+
+#naive model
+naive_model <- naive(retail_ts, h=12)
+
+#simple average model
+mean_model <- meanf(retail_ts, h=12)
+
+#moving average model
+moving_avg_model <- ma(retail_ts, order=12)
+
+#exponential smoothing model
+exp_smooth_model <- ses(retail_ts, h=12)
+
+#holt's
+holt_model <- holt(retail_ts, h=12)
+
+#holt's-winters
+hw_model <- hw(retail_ts, h=12)
+
+#decomposition
+decomp_model <- ets(retail_ts)
+decomp_forecast <- forecast(decomp_model, h=12)
+
+##summarize each model's output
+summary(naive_model)
+#takes the last observed value and assumes last observed value is the value for future periods 12 months. Good for baseline means
+summary(mean_model)
+#forecasts all future values as the mean of all historical values
+summary(moving_avg_model)
+#smooths the time series by averaging past values over specified window
+summary(exp_smooth_model)
+#consists of smoothing parameter, alpha, that is closer to 0, smoothing over a longer period. The values are the same, meaning it is using a smoothed trend. 
+summary(holt_model)
+#includes a level, from ses, and a trend, b, component. A low alpha is observed again, smoothing over a long period. A low beta means the trend has little impact. A positive b shows an upward trend. Forecast overall shows small increases in value due to trend being taken into account.
+summary(hw_model)
+#takes trend and seasonality, beta and gamma respectively. Higher alpha shows more reaction and weight to recent values, low beta means low impact from trend, gamma is moderate and notes seasonal patterns. Notable spike in December.
+summary(decomp_forecast)
+#alpha shows less weight on recent data due to low reading, small beta shows minimal trend smoothing, gamma means seasonal pattern adjusts slowly. AIC and BIC are lower than hw model, indicating a potential better fit for forecasting. Shows a high december forecast like holt-winters
+
+
+##plotting on one chart
+ylim_range <- range(c(retail_ts, naive_model$mean, mean_model$mean, moving_avg_model, 
+                      exp_smooth_model$mean, holt_model$mean, hw_model$mean, decomp_model$fitted), 
+                    na.rm = TRUE)  # Remove NA values
+
+plot(retail_ts, type="l", col="black", lwd=2, ylim=ylim_range, 
+     main="Comparison of Forecasting Models", ylab="Retail Sales", xlab="Year")
+
+lines(naive_model$mean, col="red", lwd=2)
+lines(mean_model$mean, col="blue", lwd=2)
+lines(moving_avg_model, col="green", lwd=2)
+lines(exp_smooth_model$mean, col="black", lwd=2)
+lines(holt_model$mean, col="pink", lwd=2)
+lines(hw_model$mean, col="purple", lwd=2)
+lines(decomp_forecast$mean, col="cyan", lwd=2)  
+
+
+#create legend
+legend("topleft", 
+       legend=c("Naïve", "Mean", "Moving Avg", "Exp Smoothing", "Holt’s Linear", "Holt-Winters", "Decomposition"),
+       col=c("red", "blue", "green", "black", "pink", "purple", "cyan"),
+       lty=1, lwd=2)
+
+##accuracy comparison 
+accuracy(naive_model)
+accuracy(mean_model)
+accuracy(exp_smooth_model)
+accuracy(holt_model)
+accuracy(hw_model)
+accuracy(decomp_model)
+
+#I will be choosing MAE as my accuracy measure. MAE is the mean absolute error, the absolute differences between predicted and actual values. A lower MAE is preferred in a forecasting model, as it tells us the predictions are close to actual values. When we look at the accuracy measures, we see that ets decomposition and holt-winters have the best MAE values, indicating accuracy. Since ets decomposition has the lower MAE however, we would choose it over holt-winters. 
+
